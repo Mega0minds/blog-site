@@ -101,7 +101,26 @@
                 <a href="blog.html" class="text-white text-xs md:text-sm font-medium hover:text-accent pb-1 transition">Blog</a>
                 <a href="contact.html" class="text-white text-xs md:text-sm font-medium hover:text-accent pb-1 transition">Contact Us</a>
             </div>
+
+            <!-- Mobile Menu Toggle -->
+            <button id="mobileMenuToggle" class="md:hidden text-white focus:outline-none" aria-expanded="false" aria-controls="mobileMenu">
+                <span class="sr-only">Toggle navigation</span>
+                <div class="space-y-1.5">
+                    <span class="block w-6 h-0.5 bg-white"></span>
+                    <span class="block w-6 h-0.5 bg-white"></span>
+                    <span class="block w-6 h-0.5 bg-white"></span>
+                </div>
+            </button>
         </nav>
+        <!-- Mobile Navigation -->
+        <div id="mobileMenu" class="md:hidden hidden border-t border-gray-800">
+            <div class="px-4 py-4 space-y-4">
+                <a href="index.html" class="block text-white text-sm font-medium hover:text-accent transition">Home</a>
+                <a href="about.html" class="block text-white text-sm font-medium hover:text-accent transition">About Us</a>
+                <a href="blog.html" class="block text-white text-sm font-medium hover:text-accent transition">Blog</a>
+                <a href="contact.html" class="block text-white text-sm font-medium hover:text-accent transition">Contact Us</a>
+            </div>
+        </div>
     </header>
 
     <!-- Hero Section -->
@@ -395,6 +414,32 @@
                 homePostsLoading.remove();
             }
             loadHomePosts();
+
+            const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+            const mobileMenu = document.getElementById('mobileMenu');
+
+            if (mobileMenuToggle && mobileMenu) {
+                const toggleMenu = () => {
+                    const isHidden = mobileMenu.classList.contains('hidden');
+                    if (isHidden) {
+                        mobileMenu.classList.remove('hidden');
+                        mobileMenuToggle.setAttribute('aria-expanded', 'true');
+                    } else {
+                        mobileMenu.classList.add('hidden');
+                        mobileMenuToggle.setAttribute('aria-expanded', 'false');
+                    }
+                };
+
+                mobileMenuToggle.addEventListener('click', toggleMenu);
+
+                const mobileLinks = mobileMenu.querySelectorAll('a');
+                mobileLinks.forEach(link => {
+                    link.addEventListener('click', () => {
+                        mobileMenu.classList.add('hidden');
+                        mobileMenuToggle.setAttribute('aria-expanded', 'false');
+                    });
+                });
+            }
         });
     </script>
 </body>
