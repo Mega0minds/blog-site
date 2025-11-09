@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog Post - NEWS CONNECT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0A0A0A; }
+        .bg-dark { background-color: #0A0A0A; }
+        .text-accent { color: #FF6B00; }
+        .bg-accent { background-color: #FF6B00; }
+        .border-accent { border-color: #FF6B00; }
+    </style>
+</head>
+<body class="bg-dark text-white min-h-screen flex flex-col">
+    <header class="bg-dark border-b border-gray-800">
+        <nav class="container mx-auto px-0 sm:px-6 md:px-8 lg:px-16 xl:px-20 py-4 flex items-center justify-between">
+            <a href="index.html" class="text-white font-bold text-lg sm:text-xl md:text-2xl tracking-tight">NEWS CONNECT</a>
+            <div class="hidden md:flex items-center space-x-6 lg:space-x-8 xl:space-x-10">
+                <a href="index.html" class="text-white text-xs md:text-sm font-medium hover:text-accent pb-1 transition">Home</a>
+                <a href="about.html" class="text-white text-xs md:text-sm font-medium hover:text-accent pb-1 transition">About Us</a>
+                <a href="blog.html" class="text-white text-xs md:text-sm font-medium hover:text-accent pb-1 transition">Blog</a>
+                <a href="contact.html" class="text-white text-xs md:text-sm font-medium hover:text-accent pb-1 transition">Contact Us</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="flex-1">
+        <section class="container mx-auto px-4 sm:px-6 md:px-8 lg:px-16 xl:px-20 py-12 sm:py-16">
+            <div id="postContainer" class="max-w-4xl mx-auto bg-gray-900 border border-gray-800 rounded-lg overflow-hidden shadow-lg">
+                <div class="p-6 sm:p-10 text-center text-gray-400">Loading post...</div>
+            </div>
+            <div class="max-w-4xl mx-auto mt-8 text-sm text-gray-500">
+                <a href="blog.html" class="text-accent hover:text-accent/80">← Back to Blog</a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-gray-900 border-t border-gray-800">
+        <div class="container mx-auto px-0 sm:px-6 md:px-8 lg:px-16 xl:px-20 py-6 text-center text-gray-500 text-xs sm:text-sm">
+            © 2025 NEWS CONNECT. All rights reserved.
+        </div>
+    </footer>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyA8be0_AONBFXhM9KXILDGgBGluMyoTB2Y",
+            authDomain: "topeblog-76c2f.firebaseapp.com",
+            projectId: "topeblog-76c2f",
+            storageBucket: "topeblog-76c2f.firebasestorage.app",
+            messagingSenderId: "260807786691",
+            appId: "1:260807786691:web:675932add872442acfa276",
+            measurementId: "G-XYKB3C88NE"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+
+        const postContainer = document.getElementById('postContainer');
+
+        const getQueryParam = (key) => {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(key);
+        };
+
+        const renderPost = (data) => {
+            const createdAt = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().toLocaleDateString() : (data.createdDate ? new Date(data.createdDate).toLocaleDateString() : '');
+            postContainer.innerHTML = `
+                ${data.imageUrl ? `<div class="h-72 bg-gray-800"><img src="${data.imageUrl}" alt="${data.title}" class="w-full h-full object-cover"></div>` : ''}
+                <div class="p-6 sm:p-10 space-y-6">
+                    <div class="space-y-3">
+                        <span class="inline-block text-xs sm:text-sm text-gray-400">${createdAt}</span>
+                        <h1 class="text-3xl sm:text-4xl font-extrabold text-white break-words">${data.title}</h1>
+                    </div>
+                    <div class="text-gray-300 text-base sm:text-lg leading-relaxed whitespace-pre-wrap break-words">
+                        ${data.body}
+                    </div>
+                </div>
+            `;
+        };
+
+        const showError = (message) => {
+            postContainer.innerHTML = `<div class="p-6 sm:p-10 text-center text-red-400">${message}</div>`;
+        };
+
+        const loadPost = async () => {
+            const postId = getQueryParam('id');
+            if (!postId) {
+                showError('Invalid post link.');
+                return;
+            }
+
+            try {
+                const doc = await db.collection('posts').doc(postId).get();
+                if (!doc.exists) {
+                    showError('Post not found.');
+                    return;
+                }
+                renderPost(doc.data());
+            } catch (error) {
+                console.error(error);
+                showError('Failed to load post. Please try again later.');
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', loadPost);
+    </script>
+</body>
+</html>
