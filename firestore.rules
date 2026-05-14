@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Blog posts: public read; only signed-in users may create/update/delete (admin dashboard).
+    // If your project uses different rules for /posts, merge this block instead of replacing everything.
+    match /posts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+
+      // Public comments on each post; nested replies use optional field parentId (comment document id).
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['authorName', 'text', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['authorName', 'text', 'createdAt', 'parentId'])
+          && request.resource.data.authorName is string
+          && request.resource.data.text is string
+          && request.resource.data.authorName.size() > 0
+          && request.resource.data.authorName.size() <= 120
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000
+          && (!('parentId' in request.resource.data)
+            || request.resource.data.parentId == null
+            || (request.resource.data.parentId is string && request.resource.data.parentId.size() > 0));
+        allow update, delete: if false;
+      }
+    }
+  }
+}

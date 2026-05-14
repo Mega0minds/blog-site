@@ -4,6 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>News Connect - Blog Post</title>
+    <meta property="og:site_name" content="News Connect">
+    <meta property="og:type" content="article">
+    <meta name="twitter:card" content="summary_large_image">
+    <script>
+        (function () {
+            var abs = new URL('img/home.png', location.href).href;
+            function ensureMeta(prop, name, content) {
+                var el = name
+                    ? document.querySelector('meta[name="' + name + '"]')
+                    : document.querySelector('meta[property="' + prop + '"]');
+                if (!el) {
+                    el = document.createElement('meta');
+                    if (name) el.setAttribute('name', name);
+                    else el.setAttribute('property', prop);
+                    document.head.appendChild(el);
+                }
+                el.setAttribute('content', content);
+            }
+            ensureMeta('og:image', null, abs);
+            ensureMeta(null, 'twitter:image', abs);
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -64,19 +86,268 @@
 
         const postContainer = document.getElementById('postContainer');
 
+        const DEFAULT_SHARE_IMAGE_PATH = 'img/home.png';
+
+        const absoluteFromPage = (pathOrUrl) => {
+            const s = pathOrUrl == null ? '' : String(pathOrUrl).trim();
+            if (!s) return new URL(DEFAULT_SHARE_IMAGE_PATH, window.location.href).href;
+            if (/^https?:\/\//i.test(s)) return s;
+            return new URL(s, window.location.href).href;
+        };
+
+        const shareDescription = (body, title) => {
+            let t = String(body || '').replace(/\s+/g, ' ').trim();
+            if (!t) return title || 'News Connect';
+            return t.length > 220 ? t.slice(0, 217) + '…' : t;
+        };
+
+        const setHeadMeta = (attr, key, content) => {
+            const sel = attr === 'name' ? `meta[name="${key}"]` : `meta[property="${key}"]`;
+            let el = document.querySelector(sel);
+            if (!el) {
+                el = document.createElement('meta');
+                el.setAttribute(attr, key);
+                document.head.appendChild(el);
+            }
+            el.setAttribute('content', content);
+        };
+
+        const updateShareMeta = (data, postId) => {
+            const title = data.title || 'News Connect';
+            const desc = shareDescription(data.body, title);
+            const postUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(postId)}`;
+            const hasPostImage = data.imageUrl && String(data.imageUrl).trim();
+            const imageUrl = absoluteFromPage(hasPostImage ? data.imageUrl.trim() : DEFAULT_SHARE_IMAGE_PATH);
+
+            setHeadMeta('property', 'og:url', postUrl);
+            setHeadMeta('property', 'og:title', title);
+            setHeadMeta('property', 'og:description', desc);
+            setHeadMeta('property', 'og:image', imageUrl);
+            setHeadMeta('name', 'twitter:url', postUrl);
+            setHeadMeta('name', 'twitter:title', title);
+            setHeadMeta('name', 'twitter:description', desc);
+            setHeadMeta('name', 'twitter:image', imageUrl);
+
+            let canonical = document.querySelector('link[rel="canonical"]');
+            if (!canonical) {
+                canonical = document.createElement('link');
+                canonical.setAttribute('rel', 'canonical');
+                document.head.appendChild(canonical);
+            }
+            canonical.setAttribute('href', postUrl);
+        };
+
         const getQueryParam = (key) => {
             const params = new URLSearchParams(window.location.search);
             return params.get(key);
         };
 
+        let commentsUnsubscribe = null;
+
+        const escapeHtml = (str) => {
+            const el = document.createElement('div');
+            el.textContent = str == null ? '' : String(str);
+            return el.innerHTML;
+        };
+
+        const formatCommentWhen = (ts) => {
+            if (!ts || typeof ts.toDate !== 'function') return '';
+            return ts.toDate().toLocaleString();
+        };
+
+        const setCommentsStatus = (msg, show) => {
+            const el = document.getElementById('commentsStatus');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.classList.toggle('hidden', !show);
+        };
+
+        const sortByCreated = (a, b) => (a._ms || 0) - (b._ms || 0);
+
+        const buildCommentTree = (flat) => {
+            const ids = new Set(flat.map((c) => c.id));
+            const byParent = new Map();
+            flat.forEach((c) => {
+                const parentKey = c.parentId && ids.has(c.parentId) ? c.parentId : '__root__';
+                if (!byParent.has(parentKey)) byParent.set(parentKey, []);
+                byParent.get(parentKey).push(c);
+            });
+            byParent.forEach((arr) => arr.sort(sortByCreated));
+            return byParent;
+        };
+
+        const appendCommentBranch = (container, nodes, byParent, depth) => {
+            nodes.forEach((comment) => {
+                const row = document.createElement('div');
+                row.className = depth > 0 ? 'mt-3 ml-4 sm:ml-6 pl-4 border-l-2 border-gray-700' : 'mt-4';
+
+                const card = document.createElement('div');
+                card.className = 'bg-gray-800/50 rounded-lg p-4 border border-gray-700';
+                card.dataset.commentId = comment.id;
+
+                const when = formatCommentWhen(comment.createdAt);
+                card.innerHTML = `
+                    <div class="flex flex-wrap justify-between gap-2 items-baseline">
+                        <span class="font-semibold text-accent">${escapeHtml(comment.authorName)}</span>
+                        <span class="text-xs text-gray-500">${escapeHtml(when)}</span>
+                    </div>
+                    <div class="text-gray-200 mt-2 whitespace-pre-wrap break-words">${escapeHtml(comment.text)}</div>
+                    <button type="button" class="reply-toggle mt-3 text-sm font-medium text-accent hover:underline">Reply</button>
+                    <div class="reply-box hidden mt-3 space-y-2 border-t border-gray-700 pt-3">
+                        <input type="text" class="reply-name w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-white text-sm placeholder-gray-500" placeholder="Your name" maxlength="120" required>
+                        <textarea class="reply-text w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-white text-sm placeholder-gray-500" rows="3" maxlength="4000" required placeholder="Write a reply…"></textarea>
+                        <button type="button" class="reply-send bg-accent text-white text-sm font-semibold px-4 py-2 rounded hover:bg-opacity-90 disabled:opacity-50">Post reply</button>
+                    </div>
+                `;
+
+                row.appendChild(card);
+                const kids = byParent.get(comment.id) || [];
+                if (kids.length) {
+                    const nest = document.createElement('div');
+                    appendCommentBranch(nest, kids, byParent, depth + 1);
+                    row.appendChild(nest);
+                }
+                container.appendChild(row);
+            });
+        };
+
+        const renderCommentsList = (flat) => {
+            const listEl = document.getElementById('commentsList');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+            if (!flat.length) {
+                listEl.innerHTML = '<p class="text-gray-500 text-sm">No comments yet. Be the first to comment.</p>';
+                return;
+            }
+            const byParent = buildCommentTree(flat);
+            const roots = byParent.get('__root__') || [];
+            appendCommentBranch(listEl, roots, byParent, 0);
+        };
+
+        const addComment = async (postId, authorName, text, parentId) => {
+            const payload = {
+                authorName: authorName.trim(),
+                text: text.trim(),
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            if (parentId) payload.parentId = parentId;
+            await db.collection('posts').doc(postId).collection('comments').add(payload);
+        };
+
+        const initCommentsSection = (postId) => {
+            if (commentsUnsubscribe) {
+                commentsUnsubscribe();
+                commentsUnsubscribe = null;
+            }
+
+            const listEl = document.getElementById('commentsList');
+            const form = document.getElementById('topCommentForm');
+            const submitBtn = document.getElementById('topCommentSubmit');
+            if (!listEl || !form || !submitBtn) return;
+
+            setCommentsStatus('', false);
+
+            commentsUnsubscribe = db
+                .collection('posts')
+                .doc(postId)
+                .collection('comments')
+                .orderBy('createdAt', 'asc')
+                .onSnapshot(
+                    (snap) => {
+                        setCommentsStatus('', false);
+                        const flat = snap.docs.map((doc) => {
+                            const d = doc.data();
+                            const ts = d.createdAt;
+                            const _ms = ts && ts.toDate ? ts.toDate().getTime() : 0;
+                            return {
+                                id: doc.id,
+                                authorName: d.authorName,
+                                text: d.text,
+                                parentId: d.parentId || null,
+                                createdAt: ts,
+                                _ms
+                            };
+                        });
+                        renderCommentsList(flat);
+                    },
+                    (err) => {
+                        console.error(err);
+                        setCommentsStatus(
+                            'Comments could not be loaded. In Firebase Console → Firestore → Rules, allow read on posts/{postId}/comments and create for new comments (see project comments in code).',
+                            true
+                        );
+                    }
+                );
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const nameEl = document.getElementById('topCommentName');
+                const textEl = document.getElementById('topCommentText');
+                const name = nameEl && nameEl.value.trim();
+                const text = textEl && textEl.value.trim();
+                if (!name || !text) return;
+                submitBtn.disabled = true;
+                setCommentsStatus('', false);
+                try {
+                    await addComment(postId, name, text, null);
+                    form.reset();
+                } catch (err) {
+                    console.error(err);
+                    setCommentsStatus('Could not post comment. Check Firestore rules allow creating documents in posts/{postId}/comments.', true);
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            });
+
+            listEl.addEventListener('click', (e) => {
+                const toggle = e.target.closest('.reply-toggle');
+                if (toggle) {
+                    const box = toggle.nextElementSibling;
+                    if (box && box.classList.contains('reply-box')) {
+                        box.classList.toggle('hidden');
+                    }
+                    return;
+                }
+
+                const send = e.target.closest('.reply-send');
+                if (!send) return;
+                const box = send.closest('.reply-box');
+                const card = send.closest('[data-comment-id]');
+                if (!box || !card) return;
+                const parentId = card.getAttribute('data-comment-id');
+                const nameInp = box.querySelector('.reply-name');
+                const textInp = box.querySelector('.reply-text');
+                const name = nameInp && nameInp.value.trim();
+                const text = textInp && textInp.value.trim();
+                if (!name || !text) return;
+                send.disabled = true;
+                setCommentsStatus('', false);
+                addComment(postId, name, text, parentId)
+                    .then(() => {
+                        nameInp.value = '';
+                        textInp.value = '';
+                        box.classList.add('hidden');
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        setCommentsStatus('Could not post reply. Check Firestore rules for posts/{postId}/comments.', true);
+                    })
+                    .finally(() => {
+                        send.disabled = false;
+                    });
+            });
+        };
+
         const renderPost = (data, postId) => {
             // Update page title with post title
             document.title = `News Connect - ${data.title}`;
-            
+            updateShareMeta(data, postId);
+
             const createdAt = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().toLocaleDateString() : (data.createdDate ? new Date(data.createdDate).toLocaleDateString() : '');
-            const postUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname}?id=${postId}`;
+            const postUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(postId)}`;
+            const heroSrc = data.imageUrl && String(data.imageUrl).trim() ? data.imageUrl.trim() : DEFAULT_SHARE_IMAGE_PATH;
             postContainer.innerHTML = `
-                ${data.imageUrl ? `<div class="h-72 bg-gray-800"><img src="${data.imageUrl}" alt="${data.title}" class="w-full h-full object-cover"></div>` : ''}
+                <div class="h-72 bg-gray-800"><img src="${heroSrc}" alt="${escapeHtml(data.title)}" class="w-full h-full object-cover"></div>
                 <div class="p-6 sm:p-10 space-y-6">
                     <div class="space-y-3">
                         <span class="inline-block text-xs sm:text-sm text-gray-400">${createdAt}</span>
@@ -105,8 +376,19 @@
                     <div class="text-gray-300 text-base sm:text-lg leading-relaxed whitespace-pre-wrap break-words">
                         ${data.body}
                     </div>
+                    <div class="border-t border-gray-800 pt-8 mt-8 space-y-6">
+                        <h2 class="text-xl sm:text-2xl font-bold text-white">Comments</h2>
+                        <p id="commentsStatus" class="text-sm text-amber-400 hidden" role="status"></p>
+                        <form id="topCommentForm" class="space-y-3">
+                            <input type="text" id="topCommentName" name="authorName" required maxlength="120" autocomplete="name" placeholder="Your name" class="w-full sm:max-w-md px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition">
+                            <textarea id="topCommentText" name="text" required maxlength="4000" rows="4" placeholder="Write a comment…" class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition resize-y min-h-[100px]"></textarea>
+                            <button type="submit" id="topCommentSubmit" class="bg-accent text-white font-semibold text-sm px-6 py-2.5 rounded-lg hover:bg-opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">Post comment</button>
+                        </form>
+                        <div id="commentsList" class="pt-2"></div>
+                    </div>
                 </div>
             `;
+            initCommentsSection(postId);
         };
 
         const showError = (message) => {
