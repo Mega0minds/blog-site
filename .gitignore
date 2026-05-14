@@ -1,0 +1,8 @@
+functions/node_modules/
+node_modules/
+.vercel
+.env*.local
+
+# Never commit Firebase service account keys (use Vercel env FIREBASE_SERVICE_ACCOUNT only)
+*firebase-adminsdk*.json
+*-firebase-adminsdk-*.json

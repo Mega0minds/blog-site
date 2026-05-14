@@ -4,28 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>News Connect - Blog Post</title>
-    <meta property="og:site_name" content="News Connect">
-    <meta property="og:type" content="article">
-    <meta name="twitter:card" content="summary_large_image">
-    <script>
-        (function () {
-            var abs = new URL('img/home.png', location.href).href;
-            function ensureMeta(prop, name, content) {
-                var el = name
-                    ? document.querySelector('meta[name="' + name + '"]')
-                    : document.querySelector('meta[property="' + prop + '"]');
-                if (!el) {
-                    el = document.createElement('meta');
-                    if (name) el.setAttribute('name', name);
-                    else el.setAttribute('property', prop);
-                    document.head.appendChild(el);
-                }
-                el.setAttribute('content', content);
-            }
-            ensureMeta('og:image', null, abs);
-            ensureMeta(null, 'twitter:image', abs);
-        })();
-    </script>
+    <!-- __SOCIAL_HEAD_INJECT__ -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -119,22 +98,53 @@
             const hasPostImage = data.imageUrl && String(data.imageUrl).trim();
             const imageUrl = absoluteFromPage(hasPostImage ? data.imageUrl.trim() : DEFAULT_SHARE_IMAGE_PATH);
 
+            const metaDesc = document.querySelector('meta[name="description"]');
+            if (metaDesc) metaDesc.setAttribute('content', desc);
+            else {
+                const m = document.createElement('meta');
+                m.setAttribute('name', 'description');
+                m.setAttribute('content', desc);
+                document.head.appendChild(m);
+            }
+
+            setHeadMeta('property', 'og:site_name', 'News Connect');
+            setHeadMeta('property', 'og:locale', 'en_US');
+            setHeadMeta('property', 'og:type', 'article');
             setHeadMeta('property', 'og:url', postUrl);
             setHeadMeta('property', 'og:title', title);
             setHeadMeta('property', 'og:description', desc);
             setHeadMeta('property', 'og:image', imageUrl);
+            setHeadMeta('property', 'og:image:secure_url', imageUrl);
+            setHeadMeta('property', 'og:image:width', '1200');
+            setHeadMeta('property', 'og:image:height', '630');
+            setHeadMeta('property', 'og:image:alt', title);
+
+            let published = '';
+            if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+                try {
+                    published = data.createdAt.toDate().toISOString();
+                } catch {
+                    /* ignore */
+                }
+            } else if (data.createdDate) {
+                const d = new Date(data.createdDate);
+                if (!Number.isNaN(d.getTime())) published = d.toISOString();
+            }
+            if (published) setHeadMeta('property', 'article:published_time', published);
+
+            setHeadMeta('name', 'twitter:card', 'summary_large_image');
             setHeadMeta('name', 'twitter:url', postUrl);
             setHeadMeta('name', 'twitter:title', title);
             setHeadMeta('name', 'twitter:description', desc);
             setHeadMeta('name', 'twitter:image', imageUrl);
+            setHeadMeta('name', 'twitter:image:alt', title);
 
-            let canonical = document.querySelector('link[rel="canonical"]');
-            if (!canonical) {
-                canonical = document.createElement('link');
+            if (!document.querySelector('link[rel="canonical"]')) {
+                const canonical = document.createElement('link');
                 canonical.setAttribute('rel', 'canonical');
+                canonical.setAttribute('href', postUrl);
                 document.head.appendChild(canonical);
             }
-            canonical.setAttribute('href', postUrl);
         };
 
         const getQueryParam = (key) => {
