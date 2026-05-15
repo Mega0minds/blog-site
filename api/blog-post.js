@@ -1,5 +1,6 @@
 /**
- * Vercel serverless: serves blog-post.html with Open Graph meta filled from Firestore.
+ * Vercel serverless: serves the blog post page with Open Graph meta from Firestore.
+ * Reads blog-post.template.html (repo root). Public URL stays /blog-post.html (rewrite); do not deploy a static blog-post.html or it overrides this route.
  * Set env FIREBASE_SERVICE_ACCOUNT to the JSON of a Firebase service account (Firestore read).
  */
 const admin = require('firebase-admin');
@@ -109,7 +110,7 @@ module.exports = async (req, res) => {
   const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
   const origin = `${proto}://${host}`;
 
-  const blogPath = path.join(process.cwd(), 'blog-post.html');
+  const blogPath = path.join(process.cwd(), 'blog-post.template.html');
   let template;
   try {
     template = fs.readFileSync(blogPath, 'utf8');
