@@ -74,10 +74,33 @@
             return new URL(s, window.location.href).href;
         };
 
-        const shareDescription = (body, title) => {
-            let t = String(body || '').replace(/\s+/g, ' ').trim();
-            if (!t) return title || 'News Connect';
-            return t.length > 220 ? t.slice(0, 217) + '…' : t;
+        const socialPreviewTitle = (raw, maxLen = 100) => {
+            let t = String(raw || '').trim().replace(/\s+/g, ' ');
+            t = t.replace(/\s+\.{2,}.*$/u, '').trim();
+            if (!t) return String(raw || 'News Connect').trim().slice(0, maxLen);
+            if (t.length <= maxLen) return t;
+            const cut = t.slice(0, maxLen);
+            const sp = cut.lastIndexOf(' ');
+            return `${sp > 35 ? cut.slice(0, sp) : cut}…`.trim();
+        };
+
+        const socialPreviewDescription = (body, rawTitle, ogTitle, maxLen = 160) => {
+            let plain = String(body || '').replace(/\s+/g, ' ').trim();
+            if (!plain) return 'Read on News Connect.';
+            const prefixes = [String(rawTitle || '').trim(), String(ogTitle || '').trim()].filter((p) => p.length >= 8);
+            for (const p of prefixes) {
+                if (plain.toLowerCase().startsWith(p.toLowerCase())) {
+                    plain = plain.slice(p.length).trim().replace(/^[\s.:;\-–—|]+/, '');
+                }
+            }
+            if (!plain) return 'Read on News Connect.';
+            if (plain.length > maxLen) {
+                let cut = plain.slice(0, maxLen - 1);
+                const sp = cut.lastIndexOf(' ');
+                cut = sp > 30 ? cut.slice(0, sp) : cut;
+                plain = `${cut.trim()}…`;
+            }
+            return plain;
         };
 
         const setHeadMeta = (attr, key, content) => {
@@ -92,8 +115,9 @@
         };
 
         const updateShareMeta = (data, postId) => {
-            const title = data.title || 'News Connect';
-            const desc = shareDescription(data.body, title);
+            const rawTitle = data.title || 'News Connect';
+            const ogTitle = socialPreviewTitle(rawTitle);
+            const desc = socialPreviewDescription(data.body, rawTitle, ogTitle);
             const postUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(postId)}`;
             const hasPostImage = data.imageUrl && String(data.imageUrl).trim();
             const imageUrl = absoluteFromPage(hasPostImage ? data.imageUrl.trim() : DEFAULT_SHARE_IMAGE_PATH);
@@ -111,13 +135,13 @@
             setHeadMeta('property', 'og:locale', 'en_US');
             setHeadMeta('property', 'og:type', 'article');
             setHeadMeta('property', 'og:url', postUrl);
-            setHeadMeta('property', 'og:title', title);
+            setHeadMeta('property', 'og:title', ogTitle);
             setHeadMeta('property', 'og:description', desc);
             setHeadMeta('property', 'og:image', imageUrl);
             setHeadMeta('property', 'og:image:secure_url', imageUrl);
             setHeadMeta('property', 'og:image:width', '1200');
             setHeadMeta('property', 'og:image:height', '630');
-            setHeadMeta('property', 'og:image:alt', title);
+            setHeadMeta('property', 'og:image:alt', ogTitle);
 
             let published = '';
             if (data.createdAt && typeof data.createdAt.toDate === 'function') {
@@ -134,10 +158,10 @@
 
             setHeadMeta('name', 'twitter:card', 'summary_large_image');
             setHeadMeta('name', 'twitter:url', postUrl);
-            setHeadMeta('name', 'twitter:title', title);
+            setHeadMeta('name', 'twitter:title', ogTitle);
             setHeadMeta('name', 'twitter:description', desc);
             setHeadMeta('name', 'twitter:image', imageUrl);
-            setHeadMeta('name', 'twitter:image:alt', title);
+            setHeadMeta('name', 'twitter:image:alt', ogTitle);
 
             if (!document.querySelector('link[rel="canonical"]')) {
                 const canonical = document.createElement('link');

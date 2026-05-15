@@ -18,10 +18,35 @@ function escapeAttr(s) {
     .replace(/\r?\n/g, ' ');
 }
 
-function shareDescription(body, title) {
-  const t = String(body || '').replace(/\s+/g, ' ').trim();
-  if (!t) return title || 'News Connect';
-  return t.length > 220 ? `${t.slice(0, 217)}…` : t;
+/** Title shown in WhatsApp / OG: strip feed junk (e.g. " .... Revealing…") and cap length. */
+function socialPreviewTitle(raw, maxLen = 100) {
+  let t = String(raw || '').trim().replace(/\s+/g, ' ');
+  t = t.replace(/\s+\.{2,}.*$/u, '').trim();
+  if (!t) return String(raw || 'News Connect').trim().slice(0, maxLen);
+  if (t.length <= maxLen) return t;
+  const cut = t.slice(0, maxLen);
+  const sp = cut.lastIndexOf(' ');
+  return `${sp > 35 ? cut.slice(0, sp) : cut}…`.trim();
+}
+
+/** Body blurb for OG: do not repeat the headline; trim to one card-friendly line. */
+function socialPreviewDescription(body, rawTitle, ogTitle, maxLen = 160) {
+  let plain = String(body || '').replace(/\s+/g, ' ').trim();
+  if (!plain) return 'Read on News Connect.';
+  const prefixes = [String(rawTitle || '').trim(), String(ogTitle || '').trim()].filter((p) => p.length >= 8);
+  for (const p of prefixes) {
+    if (plain.toLowerCase().startsWith(p.toLowerCase())) {
+      plain = plain.slice(p.length).trim().replace(/^[\s.:;\-–—|]+/, '');
+    }
+  }
+  if (!plain) return 'Read on News Connect.';
+  if (plain.length > maxLen) {
+    let cut = plain.slice(0, maxLen - 1);
+    const sp = cut.lastIndexOf(' ');
+    cut = sp > 30 ? cut.slice(0, sp) : cut;
+    plain = `${cut.trim()}…`;
+  }
+  return plain;
 }
 
 function absoluteImageUrl(origin, imageUrl) {
@@ -53,8 +78,11 @@ function articlePublishedIso(data) {
 
 function buildSocialHead(origin, postId, data) {
   const hasPost = data && data.title;
-  const title = hasPost ? String(data.title) : 'News Connect';
-  const desc = hasPost ? shareDescription(data.body, title) : 'Read the latest on News Connect.';
+  const rawTitle = hasPost ? String(data.title) : 'News Connect';
+  const ogTitle = socialPreviewTitle(rawTitle);
+  const desc = hasPost
+    ? socialPreviewDescription(data.body, rawTitle, ogTitle)
+    : 'Read the latest on News Connect.';
   const image = absoluteImageUrl(origin, hasPost && data.imageUrl ? data.imageUrl : '');
 
   const pathWithQuery =
@@ -75,20 +103,20 @@ function buildSocialHead(origin, postId, data) {
     <meta property="og:locale" content="en_US">
     <meta property="og:type" content="article">
     <meta property="og:url" content="${escapeAttr(canonical)}">
-    <meta property="og:title" content="${escapeAttr(title)}">
+    <meta property="og:title" content="${escapeAttr(ogTitle)}">
     <meta property="og:description" content="${escapeAttr(desc)}">
     <meta property="og:image" content="${escapeAttr(image)}">
     <meta property="og:image:secure_url" content="${escapeAttr(image)}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="${escapeAttr(title)}">
+    <meta property="og:image:alt" content="${escapeAttr(ogTitle)}">
     ${publishedMeta}
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:url" content="${escapeAttr(canonical)}">
-    <meta name="twitter:title" content="${escapeAttr(title)}">
+    <meta name="twitter:title" content="${escapeAttr(ogTitle)}">
     <meta name="twitter:description" content="${escapeAttr(desc)}">
     <meta name="twitter:image" content="${escapeAttr(image)}">
-    <meta name="twitter:image:alt" content="${escapeAttr(title)}">
+    <meta name="twitter:image:alt" content="${escapeAttr(ogTitle)}">
   `.trim();
 }
 
