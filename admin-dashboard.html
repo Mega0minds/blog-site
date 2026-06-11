@@ -52,10 +52,10 @@
                         <input id="title" name="title" type="text" required class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition" placeholder="Enter blog title">
                     </div>
                     <div>
-                        <label for="postImage" class="block text-gray-300 text-sm font-medium mb-2">Image</label>
-                        <input type="file" id="postImage" accept="image/*"
+                        <label for="postImage" class="block text-gray-300 text-sm font-medium mb-2">Images</label>
+                        <input type="file" id="postImage" accept="image/*" multiple
                             class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition">
-                        <p class="text-xs text-gray-500 mt-2">Recommended: High-quality JPG or PNG.</p>
+                        <p class="text-xs text-gray-500 mt-2">Select one or more images. Recommended: High-quality JPG or PNG.</p>
                     </div>
                     <div>
                         <label for="body" class="block text-white text-sm font-semibold mb-2">Body</label>
@@ -137,10 +137,10 @@
 
             const title = document.getElementById('title').value.trim();
             const body = document.getElementById('body').value.trim();
-            const imageFile = document.getElementById('postImage').files[0];
+            const imageFiles = Array.from(document.getElementById('postImage').files);
 
-            if (!title || !body || !imageFile) {
-                formError.textContent = 'Please fill in all fields and select an image.';
+            if (!title || !body || imageFiles.length === 0) {
+                formError.textContent = 'Please fill in all fields and select at least one image.';
                 formError.classList.remove('hidden');
                 return;
             }
@@ -150,33 +150,44 @@
             submitPostLoading.classList.remove('hidden');
 
             try {
-                const formData = new FormData();
-                formData.append('file', imageFile);
-                formData.append('upload_preset', cloudinaryConfig.uploadPreset);
-
                 if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset || cloudinaryConfig.cloudName === 'YOUR_CLOUD_NAME') {
                     throw new Error('Cloudinary configuration missing. Please set your cloudName and uploadPreset.');
                 }
 
-                const uploadResponse = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
+                const imageUrls = [];
+                const imagePublicIds = [];
 
-                if (!uploadResponse.ok) {
-                    const errorData = await uploadResponse.json();
-                    throw new Error(errorData.error?.message || 'Failed to upload image to Cloudinary.');
+                for (let i = 0; i < imageFiles.length; i++) {
+                    submitPostLoading.textContent = `Uploading image ${i + 1} of ${imageFiles.length}...`;
+
+                    const formData = new FormData();
+                    formData.append('file', imageFiles[i]);
+                    formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+
+                    const uploadResponse = await fetch(`https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!uploadResponse.ok) {
+                        const errorData = await uploadResponse.json();
+                        throw new Error(errorData.error?.message || 'Failed to upload image to Cloudinary.');
+                    }
+
+                    const uploadResult = await uploadResponse.json();
+                    imageUrls.push(uploadResult.secure_url);
+                    imagePublicIds.push(uploadResult.public_id);
                 }
-
-                const uploadResult = await uploadResponse.json();
-                const imageUrl = uploadResult.secure_url;
-                const imagePublicId = uploadResult.public_id;
 
                 await db.collection('posts').add({
                     title,
                     body,
-                    imageUrl,
-                    imagePublicId,
+                    // First image kept as imageUrl/imagePublicId for backward compatibility
+                    // (blog thumbnails and social share previews use these single fields).
+                    imageUrl: imageUrls[0],
+                    imagePublicId: imagePublicIds[0],
+                    imageUrls,
+                    imagePublicIds,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     createdDate: new Date().toISOString()
                 });
@@ -193,6 +204,7 @@
                 submitPostBtn.disabled = false;
                 submitPostText.classList.remove('hidden');
                 submitPostLoading.classList.add('hidden');
+                submitPostLoading.textContent = 'Publishing...';
             }
         });
 
@@ -234,7 +246,10 @@
                         </div>
                     `;
                     const deleteBtn = article.querySelector('button');
-                    deleteBtn.addEventListener('click', () => deletePost(doc.id, data.imagePublicId));
+                    const publicIds = Array.isArray(data.imagePublicIds) && data.imagePublicIds.length
+                        ? data.imagePublicIds
+                        : (data.imagePublicId ? [data.imagePublicId] : []);
+                    deleteBtn.addEventListener('click', () => deletePost(doc.id, publicIds));
                     fragments.appendChild(article);
                 });
 
@@ -246,13 +261,13 @@
             }
         }
 
-        async function deletePost(postId, imagePublicId) {
+        async function deletePost(postId, imagePublicIds) {
             const confirmed = confirm('Are you sure you want to delete this post?');
             if (!confirmed) return;
 
             try {
                 await db.collection('posts').doc(postId).delete();
-                console.warn('Cloudinary image not automatically deleted. Remove manually or implement a secure backend using Cloudinary Admin API.', imagePublicId);
+                console.warn('Cloudinary images not automatically deleted. Remove manually or implement a secure backend using Cloudinary Admin API.', imagePublicIds);
                 loadPosts();
             } catch (error) {
                 console.error(error);

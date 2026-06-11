@@ -177,6 +177,55 @@
         };
 
         let commentsUnsubscribe = null;
+        let carouselTimer = null;
+
+        const setupCarousel = (count) => {
+            if (carouselTimer) {
+                clearInterval(carouselTimer);
+                carouselTimer = null;
+            }
+            if (count <= 1) return;
+
+            const carousel = document.getElementById('postCarousel');
+            const track = document.getElementById('carouselTrack');
+            const prevBtn = document.getElementById('carouselPrev');
+            const nextBtn = document.getElementById('carouselNext');
+            const dots = Array.from(document.querySelectorAll('.carousel-dot'));
+            if (!carousel || !track) return;
+
+            let index = 0;
+            const AUTO_MS = 5000;
+
+            const update = () => {
+                track.style.transform = `translateX(-${index * 100}%)`;
+                dots.forEach((d, i) => {
+                    d.classList.toggle('bg-white', i === index);
+                    d.classList.toggle('bg-white/50', i !== index);
+                });
+            };
+            const go = (i) => {
+                index = (i + count) % count;
+                update();
+            };
+            const start = () => {
+                carouselTimer = setInterval(() => go(index + 1), AUTO_MS);
+            };
+            const restart = () => {
+                if (carouselTimer) clearInterval(carouselTimer);
+                start();
+            };
+
+            if (nextBtn) nextBtn.addEventListener('click', () => { go(index + 1); restart(); });
+            if (prevBtn) prevBtn.addEventListener('click', () => { go(index - 1); restart(); });
+            dots.forEach((d) => d.addEventListener('click', () => { go(Number(d.dataset.index)); restart(); }));
+
+            // Pause auto-scroll while the reader is hovering the carousel.
+            carousel.addEventListener('mouseenter', () => { if (carouselTimer) clearInterval(carouselTimer); });
+            carousel.addEventListener('mouseleave', restart);
+
+            update();
+            start();
+        };
 
         const escapeHtml = (str) => {
             const el = document.createElement('div');
@@ -379,9 +428,39 @@
 
             const createdAt = data.createdAt && data.createdAt.toDate ? data.createdAt.toDate().toLocaleDateString() : (data.createdDate ? new Date(data.createdDate).toLocaleDateString() : '');
             const postUrl = `${window.location.origin}${window.location.pathname}?id=${encodeURIComponent(postId)}`;
-            const heroSrc = data.imageUrl && String(data.imageUrl).trim() ? data.imageUrl.trim() : DEFAULT_SHARE_IMAGE_PATH;
+
+            // Collect every image for this post. Newer posts store an imageUrls array;
+            // older posts only have a single imageUrl. Fall back to the default image.
+            let images = Array.isArray(data.imageUrls)
+                ? data.imageUrls.filter((u) => u && String(u).trim()).map((u) => String(u).trim())
+                : [];
+            if (!images.length) {
+                images = [data.imageUrl && String(data.imageUrl).trim() ? data.imageUrl.trim() : DEFAULT_SHARE_IMAGE_PATH];
+            }
+            const safeTitleAttr = escapeHtml(data.title);
+            const multiple = images.length > 1;
+
+            const arrowBtn = (id, label, pathD) => `
+                <button id="${id}" type="button" aria-label="${label}" class="absolute ${id === 'carouselPrev' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center transition z-10">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${pathD}"></path></svg>
+                </button>`;
+
+            const carouselHtml = `
+                <div id="postCarousel" class="relative h-80 sm:h-[28rem] bg-black overflow-hidden">
+                    <div id="carouselTrack" class="flex h-full transition-transform duration-500 ease-out">
+                        ${images.map((src) => `<div class="w-full h-full flex-shrink-0"><img src="${src}" alt="${safeTitleAttr}" class="w-full h-full object-contain"></div>`).join('')}
+                    </div>
+                    ${multiple ? `
+                        ${arrowBtn('carouselPrev', 'Previous image', 'M15 19l-7-7 7-7')}
+                        ${arrowBtn('carouselNext', 'Next image', 'M9 5l7 7-7 7')}
+                        <div id="carouselDots" class="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-10">
+                            ${images.map((_, i) => `<button type="button" class="carousel-dot w-2.5 h-2.5 rounded-full transition ${i === 0 ? 'bg-white' : 'bg-white/50'}" data-index="${i}" aria-label="Go to image ${i + 1}"></button>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>`;
+
             postContainer.innerHTML = `
-                <div class="h-72 bg-gray-800"><img src="${heroSrc}" alt="${escapeHtml(data.title)}" class="w-full h-full object-cover"></div>
+                ${carouselHtml}
                 <div class="p-6 sm:p-10 space-y-6">
                     <div class="space-y-3">
                         <span class="inline-block text-xs sm:text-sm text-gray-400">${createdAt}</span>
@@ -422,6 +501,7 @@
                     </div>
                 </div>
             `;
+            setupCarousel(images.length);
             initCommentsSection(postId);
         };
 

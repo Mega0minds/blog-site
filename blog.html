@@ -203,11 +203,18 @@
             const category = data.category || 'Latest Insight';
             const postUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname.replace('blog.html', '')}blog-post.html?id=${id}`;
             const safeTitle = data.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const imageCount = Array.isArray(data.imageUrls) && data.imageUrls.length ? data.imageUrls.length : (data.imageUrl ? 1 : 0);
 
             const article = document.createElement('article');
             article.className = 'bg-gray-900 rounded-3xl overflow-hidden border border-gray-800 shadow-lg flex flex-col';
             article.innerHTML = `
-                ${data.imageUrl ? `<div class="h-56 bg-gray-800"><img src="${data.imageUrl}" alt="${data.title}" class="w-full h-full object-cover"></div>` : ''}
+                ${data.imageUrl ? `<div class="relative h-56 bg-gray-800">
+                    <img src="${data.imageUrl}" alt="${data.title}" class="w-full h-full object-cover">
+                    ${imageCount > 1 ? `<span class="absolute top-3 right-3 flex items-center gap-1 bg-black/60 text-white text-xs font-semibold px-2.5 py-1 rounded-full">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        ${imageCount}
+                    </span>` : ''}
+                </div>` : ''}
                 <div class="p-6 flex-1 flex flex-col gap-4">
                     <div class="space-y-2">
                         <div class="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
