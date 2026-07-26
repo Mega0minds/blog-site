@@ -49,12 +49,31 @@ function socialPreviewDescription(body, rawTitle, ogTitle, maxLen = 160) {
   return plain;
 }
 
+/**
+ * Cloudinary delivery URLs look like:
+ *   https://res.cloudinary.com/<cloud>/image/upload/<version>/<public_id>.<ext>
+ * Social scrapers (WhatsApp especially) silently drop an og:image when the file
+ * is too large. Full-resolution phone photos routinely blow past that limit, so
+ * inject a transform right after "/upload/" to cap the share image at the
+ * declared 1200x630 and auto-compress it. Non-Cloudinary URLs are returned as-is.
+ */
+function optimizeCloudinaryImage(u) {
+  const marker = '/image/upload/';
+  const idx = u.indexOf(marker);
+  if (!/res\.cloudinary\.com/i.test(u) || idx === -1) return u;
+  const after = u.slice(idx + marker.length);
+  // Don't double-apply if a transform is already present.
+  if (/^[a-z]_[^/]*\//i.test(after)) return u;
+  const transform = 'c_fill,g_auto,w_1200,h_630,q_auto,f_auto';
+  return `${u.slice(0, idx + marker.length)}${transform}/${after}`;
+}
+
 function absoluteImageUrl(origin, imageUrl) {
   const base = origin.endsWith('/') ? origin.slice(0, -1) : origin;
   const def = `${base}/img/home.png`;
   if (!imageUrl || !String(imageUrl).trim()) return def;
   const u = String(imageUrl).trim();
-  if (/^https?:\/\//i.test(u)) return u;
+  if (/^https?:\/\//i.test(u)) return optimizeCloudinaryImage(u);
   if (u.startsWith('/')) return `${base}${u}`;
   return `${base}/${u}`;
 }
@@ -83,7 +102,12 @@ function buildSocialHead(origin, postId, data) {
   const desc = hasPost
     ? socialPreviewDescription(data.body, rawTitle, ogTitle)
     : 'Read the latest on News Connect.';
-  const image = absoluteImageUrl(origin, hasPost && data.imageUrl ? data.imageUrl : '');
+  // Prefer the single imageUrl (backward-compat), else the first of imageUrls.
+  const firstImage =
+    (hasPost && data.imageUrl && String(data.imageUrl).trim()) ||
+    (hasPost && Array.isArray(data.imageUrls) && data.imageUrls.find((u) => u && String(u).trim())) ||
+    '';
+  const image = absoluteImageUrl(origin, firstImage);
 
   const pathWithQuery =
     postId && String(postId).trim()
